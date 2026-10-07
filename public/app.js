@@ -571,57 +571,53 @@ function renderHome() {
   const avg = averageScore();
   const week = runsThisWeek();
   const target = state.settings.targetRuns || 4;
-  const remaining = Math.max(0, target - week);
   const dims = dimensionAverages();
   const weakest = dims.find((item) => item.dim === plan.weakest) || dims[0] || { dim: "listening", avg: 0 };
   const recentReport = state.progressCoach?.report;
   return `<section class="page">
-    <section class="signal-hero">
-      <div class="signal-hero-copy">
-        <p class="eyebrow">Signal gym</p>
-        <h1>Train the replay before the meeting makes it expensive.</h1>
-        <p>Il Mister turns messy meeting pressure into short reps: hear the ask, choose the signal, then replay upward with enough judgement to be useful.</p>
-        <div class="signal-actions">
+    <section class="executive-desk">
+      <div class="desk-primary">
+        <p class="eyebrow">Meeting replay studio</p>
+        <h1>Practise the moment where a messy meeting becomes a useful brief.</h1>
+        <p>Short reps for engineering managers: identify the real ask, separate signal from theatre, and replay upward with a recommendation your manager can act on.</p>
+        <div class="desk-actions">
           <button class="button" data-start-scenario="${h(plan.scenario.id)}" data-framework="${h(plan.framework.id)}">Start next rep</button>
-          <button class="button button-quiet" data-route="coach">Analyse progress</button>
+          <button class="button button-quiet" data-route="coach">Open coach readout</button>
         </div>
       </div>
-      <div class="signal-board" aria-label="Training signal board">
-        <div class="signal-board-head">
-          <span>Today's constraint</span>
-          <strong>${h(dimensionName(plan.weakest))}</strong>
+      <aside class="briefing-board" aria-label="Today briefing">
+        <div class="briefing-head">
+          <div><span>Today</span><strong>${h(dimensionName(plan.weakest))}</strong></div>
+          <span class="level-token">L${plan.scenario.level}</span>
         </div>
-        <div class="signal-line signal-line-ask"><span>ASK</span><p>${h(plan.scenario.ask)}</p></div>
-        <div class="signal-line signal-line-signal"><span>SIGNAL</span><p>${h(plan.scenario.focus)}</p></div>
-        <div class="signal-line signal-line-replay"><span>REPLAY</span><p>${h(plan.framework.name)}: ${h(plan.framework.moves.slice(0, 4).join(" / "))}</p></div>
-        <div class="signal-board-foot">
-          <span>L${plan.scenario.level}</span>
+        <div class="briefing-line"><span>Ask</span><p>${h(plan.scenario.ask)}</p></div>
+        <div class="briefing-line"><span>Signal</span><p>${h(plan.scenario.focus)}</p></div>
+        <div class="briefing-line"><span>Replay rail</span><p>${h(plan.framework.name)}: ${h(plan.framework.moves.slice(0, 4).join(" / "))}</p></div>
+        <div class="briefing-foot">
           <span>${avg ? `${avg.toFixed(1)} avg` : "baseline needed"}</span>
           <span>${weakest.avg ? `${weakest.avg.toFixed(1)} ${h(plan.weakest)}` : "no trend yet"}</span>
         </div>
-      </div>
+      </aside>
     </section>
-    <section class="command-strip">
-      <div class="command-copy">
-        <p class="eyebrow">Next best rep</p>
+    <div class="home-grid">
+      <section class="practice-queue">
+        <div class="queue-topline">
+          <span class="tag">${h(plan.scenario.setting)}</span>
+          <span class="tag neutral">${h(plan.framework.name)}</span>
+          <span class="tag amber">${h(dimensionName(plan.weakest))}</span>
+        </div>
         <h2>${h(plan.scenario.title)}</h2>
-        <p>${h(dimensionHint(plan.weakest))} Use ${h(plan.framework.name)} for this run.</p>
-      </div>
-      <div class="command-metrics">
-        <div class="command-stat"><small>Focus</small><strong>${h(dimensionName(plan.weakest))}</strong></div>
-        <div class="command-stat"><small>Rhythm</small><strong>${remaining ? `${remaining} left` : "on track"}</strong></div>
-      </div>
-      <div class="command-actions">
-        <button class="button" data-start-scenario="${h(plan.scenario.id)}" data-framework="${h(plan.framework.id)}">Start planned rep</button>
-        <button class="button button-quiet" data-route="plan">View ladder</button>
-      </div>
-    </section>
-    <div class="home-grid training-grid">
-      <section class="hero-panel training-panel" data-level="L${plan.scenario.level}">
-        <div class="session-meta"><span>${h(plan.scenario.setting)}</span><span>${h(plan.framework.name)}</span><span>${h(dimensionName(plan.weakest))}</span></div>
-        <h2>${h(plan.scenario.title)}</h2>
-        <p>${h(plan.note)} The rep takes about six minutes: scan the meeting tape, capture the ask, then write the replay you would send upward.</p>
-        <div class="hero-actions"><button class="button" data-start-scenario="${h(plan.scenario.id)}" data-framework="${h(plan.framework.id)}">Start next rep</button><button class="button button-dark" data-route="frameworks">Choose a framework</button></div>
+        <p>${h(plan.note)} The rep takes about six minutes: read the tape, capture the ask, then write the replay you would use with leadership.</p>
+        <div class="queue-steps">
+          <article><span>01</span><strong>Hear</strong><p>Find the request behind the discussion.</p></article>
+          <article><span>02</span><strong>Distil</strong><p>Keep only the points that change the decision.</p></article>
+          <article><span>03</span><strong>Replay</strong><p>Say the consequence, recommendation and owner.</p></article>
+        </div>
+        <div class="queue-actions">
+          <button class="button" data-start-scenario="${h(plan.scenario.id)}" data-framework="${h(plan.framework.id)}">Start planned rep</button>
+          <button class="button button-quiet" data-route="plan">View ladder</button>
+          <button class="button button-quiet" data-route="frameworks">Choose framework</button>
+        </div>
       </section>
       <aside class="metric-stack">
         <section class="metric-panel"><h3>This week</h3><div class="ring-row"><div class="progress-ring" style="--value:${Math.min(100, Math.round(week / Math.max(1, target) * 100))}" data-label="${week}/${target}"></div><p>${week >= target ? "Weekly target met. Keep quality high." : `${target - week} more reps to hit the rhythm.`}</p></div></section>

@@ -1,5 +1,5 @@
-const CACHE = "il-mister-v6";
-const ASSETS = ["./", "index.html", "style.css?v=supabase-sync-1", "app.js?v=supabase-sync-1", "manifest.webmanifest", "favicon.svg"];
+const CACHE = "il-mister-v7";
+const ASSETS = ["./", "index.html", "style.css?v=briefing-desk-1", "app.js?v=briefing-desk-1", "manifest.webmanifest", "favicon.svg"];
 self.addEventListener("install", event => {
   self.skipWaiting();
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
