@@ -31,10 +31,20 @@ The app follows the same D1-backed setup style as the referenced tracker: `.open
 
 ```bash
 pnpm install
-npm run dev
-npm run build
-npm run start
+pnpm dev
+pnpm build
+pnpm start
 ```
+
+## Deployment
+
+Netlify deploys are triggered with:
+
+```bash
+pnpm deploy:netlify
+```
+
+Set `NETLIFY_BUILD_HOOK_URL` in `.env.local` or in the deployment environment. The hook URL is intentionally kept out of source control.
 
 ## Optional AI coach
 
