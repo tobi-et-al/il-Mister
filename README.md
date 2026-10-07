@@ -30,7 +30,7 @@ The app follows the same D1-backed setup style as the referenced tracker: `.open
 ## Local commands
 
 ```bash
-npm run install:ci
+pnpm install
 npm run dev
 npm run build
 npm run start
