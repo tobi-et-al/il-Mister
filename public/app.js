@@ -389,6 +389,24 @@ function dimensionAverages() {
   });
 }
 
+function dimensionName(dim) {
+  return {
+    listening: "Listening",
+    signal: "Signal",
+    structure: "Structure",
+    upward: "Upward replay",
+  }[dim] || dim;
+}
+
+function dimensionHint(dim) {
+  return {
+    listening: "Slow the tape down and confirm the ask before compressing.",
+    signal: "Separate decision-changing constraints from interesting detail.",
+    structure: "Use the framework moves as your rails before writing prose.",
+    upward: "Lead with consequence, recommendation and the decision needed.",
+  }[dim] || "Run a focused rep and compare what changed.";
+}
+
 function derivePlan() {
   const dims = dimensionAverages();
   const weakest = [...dims].sort((a, b) => (a.avg || 0) - (b.avg || 0))[0] || { dim: "listening", avg: 0 };
@@ -440,8 +458,24 @@ function renderHome() {
   const avg = averageScore();
   const week = runsThisWeek();
   const target = state.settings.targetRuns || 4;
+  const remaining = Math.max(0, target - week);
   return `<section class="page">
     ${pageHead("Practice cockpit", "Get better at hearing the ask, finding the signal and replaying it up.", "Short, realistic reps for engineering managers who spend a lot of their life in meetings. Each run trains compression, judgement and upward clarity.")}
+    <section class="command-strip">
+      <div class="command-copy">
+        <p class="eyebrow">Next best rep</p>
+        <h2>${h(plan.scenario.title)}</h2>
+        <p>${h(dimensionHint(plan.weakest))} Use ${h(plan.framework.name)} for this run.</p>
+      </div>
+      <div class="command-metrics">
+        <div class="command-stat"><small>Focus</small><strong>${h(dimensionName(plan.weakest))}</strong></div>
+        <div class="command-stat"><small>Rhythm</small><strong>${remaining ? `${remaining} left` : "on track"}</strong></div>
+      </div>
+      <div class="command-actions">
+        <button class="button" data-start-scenario="${h(plan.scenario.id)}" data-framework="${h(plan.framework.id)}">Start planned rep</button>
+        <button class="button button-quiet" data-route="plan">View ladder</button>
+      </div>
+    </section>
     <div class="home-grid">
       <section class="hero-panel" data-level="L${plan.scenario.level}">
         <div class="session-meta"><span>${h(plan.scenario.setting)}</span><span>${h(plan.framework.name)}</span><span>${h(plan.weakest)} focus</span></div>
@@ -470,6 +504,11 @@ function renderPractice() {
   const transcript = item.beats.map((beat) => `${beat.speaker}: ${beat.text}`).join("\n");
   return `<section class="page">
     ${pageHead("Practice run", "Listen for the real ask, not every word.", "Reveal the meeting tape in beats, capture what matters, then ask the coach to score your upward replay. Cmd+Enter submits when the fields are ready.")}
+    <div class="practice-intel">
+      <span><strong>${h(item.setting)}</strong>${h(item.pressure)}</span>
+      <span><strong>${h(fw.name)}</strong>${h(fw.moves.slice(0, 3).join(" / "))}</span>
+      <span><strong>L${item.level}</strong>${h(item.focus)}</span>
+    </div>
     <div class="practice-grid">
       <section class="practice-column">
         <div class="section-panel">
@@ -502,9 +541,12 @@ function renderPractice() {
       <section class="practice-column">
         <div class="form-panel section-panel">
           <h2>Your capture</h2>
+          <p class="capture-helper">Write for your manager's next decision: ask, signal, summary, replay, next action.</p>
           <div class="capture-grid" data-transcript="${h(transcript)}">
-            <label>What is the real ask?<textarea data-field="ask" placeholder="The decision, clarification or action being asked for...">${h(draft.ask)}</textarea></label>
-            <label>Which points matter most?<textarea data-field="signals" placeholder="Constraints, risks, commitments, timing, owners...">${h(draft.signals)}</textarea></label>
+            <div class="field-pair">
+              <label>What is the real ask?<textarea data-field="ask" placeholder="The decision, clarification or action being asked for...">${h(draft.ask)}</textarea></label>
+              <label>Which points matter most?<textarea data-field="signals" placeholder="Constraints, risks, commitments, timing, owners...">${h(draft.signals)}</textarea></label>
+            </div>
             <label>Thirty-second summary<textarea class="wide" data-field="summary" placeholder="The version you would say out loud after the meeting...">${h(draft.summary)}</textarea></label>
             <label>Manage-up replay<textarea class="wide" data-field="replay" placeholder="Bottom line, so what, recommendation, decision needed...">${h(draft.replay)}</textarea></label>
             <label>Next action<textarea data-field="action" placeholder="What you will do, ask, or decide next...">${h(draft.action)}</textarea></label>
@@ -553,10 +595,31 @@ function coachResultHtml(coach) {
 function renderRuns() {
   const runs = [...state.runs].reverse();
   const avg = averageScore();
+  const dims = dimensionAverages();
+  const weakest = [...dims].sort((a, b) => (a.avg || 0) - (b.avg || 0))[0] || { dim: "listening", avg: 0 };
+  const plan = derivePlan();
   return `<section class="page">
     ${pageHead("Run monitor", "Your practice history should tell you what to train next.", "Track patterns across reps so improvement does not depend on vibes after a long meeting day.")}
-    <div class="section-title"><h2>Summary</h2><p>${state.runs.length} runs, ${avg ? avg.toFixed(1) : "0.0"} average</p></div>
-    ${runs.length ? `<div class="run-grid">${runs.map(runCard).join("")}</div>` : `<div class="empty-state"><h2>No runs yet.</h2><p>Start one rep and the monitor will begin showing trends.</p><button class="button" data-route="practice">Start practice</button></div>`}
+    <div class="run-monitor-layout">
+      <aside class="trend-panel">
+        <p class="eyebrow">Weakest dimension</p>
+        <h2>${h(dimensionName(weakest.dim))}</h2>
+        <p>${h(dimensionHint(weakest.dim))}</p>
+        <div class="trend-bars">
+          ${dims.map((item) => `<div class="bar-row"><span>${h(dimensionName(item.dim))}</span><div class="bar-track"><span style="width:${Math.min(100, (item.avg || 0) * 20)}%"></span></div><strong>${item.avg ? item.avg.toFixed(1) : "-"}</strong></div>`).join("")}
+        </div>
+        <div class="next-drill-box">
+          <span class="tag coral">${h(plan.framework.name)}</span>
+          <strong>${h(plan.scenario.title)}</strong>
+          <p>${h(plan.note)}</p>
+          <button class="button button-teal button-small" data-start-scenario="${h(plan.scenario.id)}" data-framework="${h(plan.framework.id)}">Start planned rep</button>
+        </div>
+      </aside>
+      <section class="run-list-panel">
+        <div class="section-title"><h2>Recent runs</h2><p>${state.runs.length} runs, ${avg ? avg.toFixed(1) : "0.0"} average</p></div>
+        ${runs.length ? `<div class="run-grid compact">${runs.map(runCard).join("")}</div>` : `<div class="empty-state"><h2>No runs yet.</h2><p>Start one rep and the monitor will begin showing trends.</p><button class="button" data-route="practice">Start practice</button></div>`}
+      </section>
+    </div>
   </section>`;
 }
 
