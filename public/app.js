@@ -196,9 +196,10 @@ const DEFAULT_STATE = {
 
 const KEY = "il-mister-state-v1";
 const cloudAccount = document.querySelector("#cloud-account")?.dataset || {};
+const cloudEnabled = cloudAccount.storageMode !== "local" && Boolean(cloudAccount.userId);
 let state = loadState();
 let cloudRevision = null;
-let cloudStatus = "loading";
+let cloudStatus = cloudEnabled ? "loading" : "offline";
 let syncTimer = null;
 let selectedScenarioId = state.settings.lastScenarioId || SCENARIOS[0].id;
 let selectedFrameworkId = state.settings.lastFrameworkId || FRAMEWORKS[0].id;
@@ -259,6 +260,10 @@ function saveState(options = {}) {
 }
 
 function queueCloudSave() {
+  if (!cloudEnabled) {
+    setCloudStatus("offline", "Local only");
+    return;
+  }
   clearTimeout(syncTimer);
   syncTimer = setTimeout(pushCloud, 650);
 }
@@ -292,6 +297,10 @@ function mergeCloudConflict(remote, local) {
 }
 
 async function pushCloud() {
+  if (!cloudEnabled) {
+    setCloudStatus("offline", "Local only");
+    return;
+  }
   setCloudStatus("syncing", "Saving");
   try {
     const response = await fetch("/api/state", {
@@ -315,6 +324,10 @@ async function pushCloud() {
 }
 
 async function loadCloud() {
+  if (!cloudEnabled) {
+    setCloudStatus("offline", "Local only");
+    return;
+  }
   try {
     const response = await fetch("/api/state", { headers: { accept: "application/json" } });
     if (!response.ok) throw new Error("Cloud unavailable");
@@ -667,10 +680,22 @@ function renderPlan() {
 }
 
 function renderSettings() {
+  const storageCopy = cloudEnabled
+    ? `Progress is saved locally first and synced to the private D1-backed app state when available.`
+    : `Progress is saved locally in this browser. Export a backup when you want to move it to another device.`;
+  const accountCopy = cloudEnabled
+    ? `Your practice record is private to <strong>${h(cloudAccount.userEmail || "your signed-in account")}</strong>.`
+    : `Your practice record is saved on <strong>${h(cloudAccount.userEmail || "this browser")}</strong>.`;
+  const syncCopy = cloudEnabled
+    ? cloudStatus === "synced" ? "Progress synced" : cloudStatus === "syncing" ? "Saving changes" : cloudStatus === "offline" ? "Saved locally; cloud retry pending" : "Connecting"
+    : "Saved locally on this device";
+  const syncAction = cloudEnabled
+    ? `<button class="button button-quiet" data-sync-now>Sync now</button>`
+    : `<button class="button button-quiet" data-export>Export backup</button>`;
   return `<section class="page">
-    ${pageHead("Settings", "Keep the app frictionless and portable.", "Progress is saved locally first and synced to the private D1-backed app state when available.")}
+    ${pageHead("Settings", "Keep the app frictionless and portable.", storageCopy)}
     <div class="settings-stack">
-      <section class="settings-panel"><h2>Account and sync</h2><p>Your practice record is private to <strong>${h(cloudAccount.userEmail || "your signed-in account")}</strong>.</p><div class="sync-summary" data-state="${h(cloudStatus)}"><span class="cloud-dot"></span><span>${cloudStatus === "synced" ? "Progress synced" : cloudStatus === "syncing" ? "Saving changes" : cloudStatus === "offline" ? "Saved locally; cloud retry pending" : "Connecting"}</span></div><div class="settings-actions"><button class="button button-quiet" data-sync-now>Sync now</button></div></section>
+      <section class="settings-panel"><h2>Account and sync</h2><p>${accountCopy}</p><div class="sync-summary" data-state="${h(cloudStatus)}"><span class="cloud-dot"></span><span>${syncCopy}</span></div><div class="settings-actions">${syncAction}</div></section>
       <section class="settings-panel"><h2>Weekly rhythm</h2><p>Set the target shown in the rail and home dashboard.</p><label>Practice runs per week<input id="target-runs" type="number" min="1" max="20" step="1" value="${h(state.settings.targetRuns || 4)}"></label></section>
       <section class="settings-panel"><h2>Backups</h2><p>Export or restore a JSON backup if you want to move between environments.</p><div class="settings-actions"><button class="button" data-export>Export</button><button class="button button-quiet" data-import>Import</button><button class="button button-danger" data-reset>Reset</button></div></section>
     </div>
@@ -937,3 +962,9 @@ document.querySelector("#backup-input")?.addEventListener("change", async (event
 window.addEventListener("hashchange", render);
 render();
 loadCloud();
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}

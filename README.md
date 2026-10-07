@@ -38,7 +38,9 @@ pnpm start
 
 ## Deployment
 
-Netlify deploys are triggered with:
+Netlify hosts the direct app from `public/`, the same style as the newborn tracker: a static `index.html` plus browser-side `app.js`/`style.css`. That direct version saves locally in the browser and uses export/import for portability.
+
+Deploys are triggered with:
 
 ```bash
 pnpm deploy:netlify

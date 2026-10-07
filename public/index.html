@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#172021" />
+  <meta name="description" content="Practice listening, summarising and manage-up replay under realistic meeting pressure." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Il Mister" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="favicon.svg" />
+  <link rel="stylesheet" href="style.css" />
+  <title>Il Mister</title>
+</head>
+<body>
+  <div id="cloud-account" data-storage-mode="local" data-user-email="this browser" data-user-name="Direct Netlify" hidden></div>
+  <div class="app-shell">
+    <aside class="rail" aria-label="Primary navigation">
+      <a class="brand" href="#home" aria-label="Il Mister home">
+        <span class="brand-mark">IM</span>
+        <span><strong>Il Mister</strong><small>LISTEN / DISTIL / REPLAY</small></span>
+      </a>
+      <nav id="primary-nav" class="rail-nav"></nav>
+      <div class="rail-foot">
+        <div id="cloud-status" class="cloud-status" data-state="offline" role="status" aria-live="polite">
+          <span class="cloud-dot"></span>
+          <span><strong>Local only</strong><small>this browser</small></span>
+        </div>
+        <div class="rail-stat"><span id="rail-percent">0%</span><small>target met</small></div>
+        <div class="mini-track"><span id="rail-track"></span></div>
+      </div>
+    </aside>
+    <main id="app" tabindex="-1"></main>
+    <nav id="mobile-nav" class="mobile-nav" aria-label="Primary navigation"></nav>
+  </div>
+  <dialog id="coach-dialog" class="coach-dialog"><div id="coach-shell"></div></dialog>
+  <dialog id="confirm-dialog" class="confirm-dialog">
+    <form method="dialog">
+      <p class="eyebrow">Please confirm</p>
+      <h2 id="confirm-title">Reset progress?</h2>
+      <p id="confirm-copy">This cannot be undone unless you exported a backup.</p>
+      <div class="dialog-actions">
+        <button value="cancel" class="button button-quiet">Cancel</button>
+        <button id="confirm-action" value="confirm" class="button button-danger">Reset</button>
+      </div>
+    </form>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <input id="backup-input" type="file" accept="application/json" hidden />
+  <script src="app.js" defer></script>
+</body>
+</html>
