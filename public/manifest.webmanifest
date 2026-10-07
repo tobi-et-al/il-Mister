@@ -1,0 +1,10 @@
+{
+  "name": "Il Mister",
+  "short_name": "Il Mister",
+  "description": "Practice listening, summarising and manage-up replay under realistic meeting pressure.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f3f0e7",
+  "theme_color": "#172021",
+  "icons": [{"src":"favicon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}

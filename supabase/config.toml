@@ -1,0 +1,4 @@
+project_id = "il-mister"
+
+[functions.il-mister-coach]
+verify_jwt = false
