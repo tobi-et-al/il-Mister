@@ -38,7 +38,7 @@ pnpm start
 
 ## Deployment
 
-Netlify hosts the direct app from `public/`, the same style as the newborn tracker: a static `index.html` plus browser-side `app.js`/`style.css`. That direct version saves locally in the browser and uses export/import for portability.
+Netlify hosts the direct app from `public/`, the same style as the newborn tracker: a static `index.html` plus browser-side `app.js`/`style.css`. The app keeps a local safety copy, then syncs the shared practice state to the same Supabase project used by the newborn tracker.
 
 Deploys are triggered with:
 
@@ -47,6 +47,10 @@ pnpm deploy:netlify
 ```
 
 Set `NETLIFY_BUILD_HOOK_URL` in `.env.local` or in the deployment environment. The hook URL is intentionally kept out of source control.
+
+## Supabase sync
+
+Run `supabase.sql` once in the newborn tracker Supabase project to create `public.il_mister_shared_state` and its anonymous read/write policies. Existing local Il Mister data merges into that shared record on the next app load or manual sync.
 
 ## Optional AI progress coach
 

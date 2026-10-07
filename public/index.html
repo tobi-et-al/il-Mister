@@ -11,11 +11,11 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="favicon.svg" />
-  <link rel="stylesheet" href="style.css?v=signal-gym-1" />
+  <link rel="stylesheet" href="style.css?v=supabase-sync-1" />
   <title>Il Mister</title>
 </head>
 <body>
-  <div id="cloud-account" data-storage-mode="local" data-user-email="this browser" data-user-name="Direct Netlify" hidden></div>
+  <div id="cloud-account" data-storage-mode="supabase" data-user-email="shared Supabase" data-user-name="Il Mister" hidden></div>
   <div class="app-shell">
     <aside class="rail" aria-label="Primary navigation">
       <a class="brand" href="#home" aria-label="Il Mister home">
@@ -24,9 +24,9 @@
       </a>
       <nav id="primary-nav" class="rail-nav"></nav>
       <div class="rail-foot">
-        <div id="cloud-status" class="cloud-status" data-state="offline" role="status" aria-live="polite">
+        <div id="cloud-status" class="cloud-status" data-state="loading" role="status" aria-live="polite">
           <span class="cloud-dot"></span>
-          <span><strong>Local only</strong><small>this browser</small></span>
+          <span><strong>Connecting</strong><small>Supabase</small></span>
         </div>
         <div class="rail-stat"><span id="rail-percent">0%</span><small>target met</small></div>
         <div class="mini-track"><span id="rail-track"></span></div>
@@ -49,6 +49,7 @@
   </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <input id="backup-input" type="file" accept="application/json" hidden />
-  <script src="app.js?v=signal-gym-1" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js?v=supabase-sync-1" defer></script>
 </body>
 </html>

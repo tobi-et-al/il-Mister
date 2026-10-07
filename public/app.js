@@ -198,9 +198,13 @@ const DEFAULT_STATE = {
 
 const KEY = "il-mister-state-v1";
 const cloudAccount = document.querySelector("#cloud-account")?.dataset || {};
-const cloudEnabled = cloudAccount.storageMode !== "local" && Boolean(cloudAccount.userId);
+const SUPABASE_URL = "https://xmpghizpaxffjmwgfxih.supabase.co";
+const SUPABASE_KEY = "sb_publishable_FYBaxDTy_Dk34_FQHz4uMQ_WZ2KShqg";
+const SUPABASE_TABLE = "il_mister_shared_state";
+const SUPABASE_SHARED_ID = "default";
+const supabaseClient = window.supabase?.createClient?.(SUPABASE_URL, SUPABASE_KEY) || null;
+const cloudEnabled = Boolean(supabaseClient);
 let state = loadState();
-let cloudRevision = null;
 let cloudStatus = cloudEnabled ? "loading" : "offline";
 let syncTimer = null;
 let selectedScenarioId = state.settings.lastScenarioId || SCENARIOS[0].id;
@@ -305,25 +309,17 @@ async function pushCloud() {
     setCloudStatus("offline", "Local only");
     return;
   }
-  setCloudStatus("syncing", "Saving");
+  setCloudStatus("syncing", "Syncing");
   try {
-    const response = await fetch("/api/state", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ state, baseRevision: cloudRevision }),
-    });
-    const payload = await response.json();
-    if (response.status === 409 && payload.record) {
-      state = mergeCloudConflict(payload.record.state, state);
-      cloudRevision = payload.record.revision;
-      localStorage.setItem(KEY, JSON.stringify(state));
-      return pushCloud();
-    }
-    if (!response.ok) throw new Error(payload.error || "Sync failed");
-    cloudRevision = payload.record.revision;
+    const { error } = await supabaseClient
+      .from(SUPABASE_TABLE)
+      .upsert({ id: SUPABASE_SHARED_ID, data: clone(state), updated_at: new Date().toISOString() })
+      .select("data, updated_at")
+      .maybeSingle();
+    if (error) throw error;
     setCloudStatus("synced", "Synced");
   } catch {
-    setCloudStatus("offline", "Local only");
+    setCloudStatus("offline", "Sync unavailable");
   }
 }
 
@@ -333,17 +329,22 @@ async function loadCloud() {
     return;
   }
   try {
-    const response = await fetch("/api/state", { headers: { accept: "application/json" } });
-    if (!response.ok) throw new Error("Cloud unavailable");
-    const payload = await response.json();
-    if (payload.record?.state) {
-      const remote = normaliseState(payload.record.state);
-      cloudRevision = payload.record.revision;
+    setCloudStatus("syncing", "Checking");
+    const { data, error } = await supabaseClient
+      .from(SUPABASE_TABLE)
+      .select("data, updated_at")
+      .eq("id", SUPABASE_SHARED_ID)
+      .maybeSingle();
+    if (error) throw error;
+    if (data?.data) {
+      const remote = normaliseState(data.data);
       const localStamp = new Date(state.updatedAt || state.createdAt || 0).getTime();
-      const remoteStamp = new Date(remote.updatedAt || remote.createdAt || 0).getTime();
-      if (state.runs.length && localStamp > remoteStamp) {
+      const remoteStamp = new Date(data.updated_at || remote.updatedAt || remote.createdAt || 0).getTime();
+      const hasLocalWork = state.runs.length || Object.keys(state.drafts || {}).length || state.progressCoach;
+      if (hasLocalWork && localStamp >= remoteStamp - 1000) {
         state = mergeCloudConflict(remote, state);
-        saveState({ touch: false });
+        localStorage.setItem(KEY, JSON.stringify(state));
+        await pushCloud();
       } else {
         state = remote;
         localStorage.setItem(KEY, JSON.stringify(state));
@@ -356,7 +357,7 @@ async function loadCloud() {
     }
     setCloudStatus("synced", "Synced");
   } catch {
-    setCloudStatus("offline", "Local only");
+    setCloudStatus("offline", "Sync unavailable");
   }
 }
 
@@ -875,13 +876,13 @@ function renderPlan() {
 
 function renderSettings() {
   const storageCopy = cloudEnabled
-    ? `Progress is saved locally first and synced to the private D1-backed app state when available.`
+    ? `Progress is saved locally first and synced to the shared Supabase database used by the newborn tracker.`
     : `Progress is saved locally in this browser. Export a backup when you want to move it to another device.`;
   const accountCopy = cloudEnabled
-    ? `Your practice record is private to <strong>${h(cloudAccount.userEmail || "your signed-in account")}</strong>.`
+    ? `Your practice record syncs to <strong>the shared Supabase record</strong>. Existing local runs are pushed up automatically.`
     : `Your practice record is saved on <strong>${h(cloudAccount.userEmail || "this browser")}</strong>.`;
   const syncCopy = cloudEnabled
-    ? cloudStatus === "synced" ? "Progress synced" : cloudStatus === "syncing" ? "Saving changes" : cloudStatus === "offline" ? "Saved locally; cloud retry pending" : "Connecting"
+    ? cloudStatus === "synced" ? "Progress synced to Supabase" : cloudStatus === "syncing" ? "Syncing with Supabase" : cloudStatus === "offline" ? "Saved locally; Supabase retry pending" : "Connecting"
     : "Saved locally on this device";
   const syncAction = cloudEnabled
     ? `<button class="button button-quiet" data-sync-now>Sync now</button>`
