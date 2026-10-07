@@ -175,8 +175,9 @@ const NAV = [
   ["practice", "Practice", "rep"],
   ["runs", "Runs", "log"],
   ["frameworks", "Frameworks", "tools"],
+  ["coach", "Coach", "AI"],
   ["plan", "Plan", "next"],
-  ["settings", "Settings", "sync"],
+  ["settings", "Settings", "data"],
 ];
 
 const DEFAULT_STATE = {
@@ -187,6 +188,7 @@ const DEFAULT_STATE = {
   drafts: {},
   deletedRuns: {},
   activityDates: [],
+  progressCoach: null,
   settings: {
     targetRuns: 4,
     lastScenarioId: "roadmap-cut",
@@ -206,6 +208,7 @@ let selectedFrameworkId = state.settings.lastFrameworkId || FRAMEWORKS[0].id;
 let beatIndex = 2;
 let latestCoach = null;
 let scoring = false;
+let progressCoachLoading = false;
 
 function h(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -239,6 +242,7 @@ function normaliseState(value) {
     drafts: incoming.drafts && typeof incoming.drafts === "object" ? incoming.drafts : {},
     deletedRuns: incoming.deletedRuns && typeof incoming.deletedRuns === "object" ? incoming.deletedRuns : {},
     activityDates: Array.isArray(incoming.activityDates) ? incoming.activityDates : [],
+    progressCoach: incoming.progressCoach && typeof incoming.progressCoach === "object" ? incoming.progressCoach : null,
     settings: { ...base.settings, ...(incoming.settings || {}) },
   };
 }
@@ -420,6 +424,16 @@ function dimensionHint(dim) {
   }[dim] || "Run a focused rep and compare what changed.";
 }
 
+function trimWords(value, limit = 70) {
+  const words = String(value || "").trim().split(/\s+/).filter(Boolean);
+  return words.length > limit ? `${words.slice(0, limit).join(" ")}...` : words.join(" ");
+}
+
+function averageOf(runs, field = "overall") {
+  const values = runs.map((run) => field === "overall" ? run.overall : run.scores?.[field]).filter(Number.isFinite);
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+}
+
 function derivePlan() {
   const dims = dimensionAverages();
   const weakest = [...dims].sort((a, b) => (a.avg || 0) - (b.avg || 0))[0] || { dim: "listening", avg: 0 };
@@ -435,6 +449,91 @@ function derivePlan() {
     note: state.runs.length < 3
       ? "Build a three-run baseline before trusting the trend."
       : `Your next useful constraint is ${weakest.dim}. Use ${fw.name} to force a cleaner rep.`,
+  };
+}
+
+function progressPayload() {
+  const recentRuns = state.runs.slice(-10).map((run) => ({
+    date: run.date,
+    scenarioTitle: SCENARIOS.find((item) => item.id === run.scenarioId)?.title || run.scenarioTitle || "Practice run",
+    frameworkName: FRAMEWORKS.find((item) => item.id === run.frameworkId)?.name || run.frameworkName || "Framework",
+    overall: run.overall || 0,
+    scores: run.scores || {},
+    replay: trimWords(run.fields?.replay || "", 70),
+    summary: trimWords(run.fields?.summary || "", 45),
+    nextDrill: trimWords(run.coach?.nextDrill || "", 32),
+  }));
+  const lastThree = state.runs.slice(-3);
+  const previousThree = state.runs.slice(-6, -3);
+  const plan = derivePlan();
+  return {
+    generatedAt: new Date().toISOString(),
+    totals: {
+      totalRuns: state.runs.length,
+      weeklyRuns: runsThisWeek(),
+      targetRuns: state.settings.targetRuns || 4,
+      streakDays: streakDays(),
+      averageScore: Number(averageScore().toFixed(2)),
+      lastThreeAverage: Number(averageOf(lastThree).toFixed(2)),
+      previousThreeAverage: Number(averageOf(previousThree).toFixed(2)),
+    },
+    dimensions: dimensionAverages().map((item) => ({ dim: item.dim, name: dimensionName(item.dim), avg: Number((item.avg || 0).toFixed(2)) })),
+    nextPlan: {
+      weakest: plan.weakest,
+      frameworkId: plan.framework.id,
+      frameworkName: plan.framework.name,
+      scenarioId: plan.scenario.id,
+      scenarioTitle: plan.scenario.title,
+      note: plan.note,
+    },
+    recentRuns,
+  };
+}
+
+function localProgressCoach(payload = progressPayload()) {
+  const dims = [...(payload.dimensions || [])].sort((a, b) => (a.avg || 0) - (b.avg || 0));
+  const weakest = dims[0] || { dim: "listening", name: "Listening", avg: 0 };
+  const strongest = [...dims].sort((a, b) => (b.avg || 0) - (a.avg || 0))[0] || { dim: "signal", name: "Signal", avg: 0 };
+  const totalRuns = payload.totals?.totalRuns || 0;
+  const trend = (payload.totals?.lastThreeAverage || 0) - (payload.totals?.previousThreeAverage || 0);
+  const plan = payload.nextPlan || derivePlan();
+  if (!totalRuns) {
+    return {
+      mode: "local",
+      headline: "Build a three-run baseline first.",
+      summary: "You do not have enough scored reps for a real trend yet. Start with three short runs so the coach can separate noise from a pattern.",
+      pattern: "No practice history yet.",
+      strengths: ["The app is ready for a quick baseline.", "The first goal is consistency, not perfection."],
+      risks: ["Do not over-tune the system before you have three examples.", "Avoid switching frameworks after every single attempt."],
+      nextThreeRuns: [
+        { title: plan.scenarioTitle || "The roadmap squeeze", framework: plan.frameworkName || "Readback", why: "Create a listening baseline." },
+        { title: "The incident review that is not really over", framework: "SBAR", why: "Practise separating fact, risk and recommendation." },
+        { title: "The skip-level signal", framework: "BLUF", why: "Practise a sensitive manage-up replay." },
+      ],
+      managerPractice: "After the next run, write one sentence that starts: \"The decision I think you need is...\"",
+      coachNote: "Local progress coach used. Configure the Netlify AI environment variables for model-backed feedback.",
+    };
+  }
+  return {
+    mode: "local",
+    headline: `${weakest.name} is the next useful constraint.`,
+    summary: `You have ${totalRuns} scored run${totalRuns === 1 ? "" : "s"}. Your strongest area is ${strongest.name.toLowerCase()}, and the next gain is ${weakest.name.toLowerCase()}.`,
+    pattern: trend > 0.25 ? "The recent average is moving up." : trend < -0.25 ? "The recent average has dipped, so simplify the next rep." : "The recent average is broadly flat; change the constraint rather than adding more volume.",
+    strengths: [
+      `${strongest.name} is currently your best-scored dimension.`,
+      totalRuns >= 3 ? "There is enough history to choose focused reps instead of random practice." : "You have started the loop; add a few more reps before trusting the trend.",
+    ],
+    risks: [
+      `${weakest.name} may be limiting the quality of the replay.`,
+      "The next rep should constrain one behaviour, not ask you to improve everything at once.",
+    ],
+    nextThreeRuns: [
+      { title: plan.scenarioTitle, framework: plan.frameworkName, why: `Target ${weakest.name.toLowerCase()} with one clean rep.` },
+      { title: plan.scenarioTitle, framework: plan.frameworkName, why: "Repeat it and cut the replay by 25 percent." },
+      { title: strongest.name === "Upward replay" ? "The incident review that is not really over" : "The ambiguous exec ask", framework: weakest.dim === "listening" ? "Readback" : "BLUF", why: "Transfer the skill into a higher-pressure meeting." },
+    ],
+    managerPractice: "In your next real meeting, pause before summarising and say: \"Let me check I have the ask right: the decision is..., the constraint is..., and the next move is...\"",
+    coachNote: "Local progress coach used. Configure the Netlify AI environment variables for model-backed feedback.",
   };
 }
 
@@ -458,7 +557,7 @@ function renderNav() {
 
 function render() {
   updateShell();
-  const views = { home: renderHome, practice: renderPractice, runs: renderRuns, frameworks: renderFrameworks, plan: renderPlan, settings: renderSettings };
+  const views = { home: renderHome, practice: renderPractice, runs: renderRuns, frameworks: renderFrameworks, coach: renderCoach, plan: renderPlan, settings: renderSettings };
   document.querySelector("#app").innerHTML = (views[route()] || renderHome)();
 }
 
@@ -472,8 +571,35 @@ function renderHome() {
   const week = runsThisWeek();
   const target = state.settings.targetRuns || 4;
   const remaining = Math.max(0, target - week);
+  const dims = dimensionAverages();
+  const weakest = dims.find((item) => item.dim === plan.weakest) || dims[0] || { dim: "listening", avg: 0 };
+  const recentReport = state.progressCoach?.report;
   return `<section class="page">
-    ${pageHead("Practice cockpit", "Get better at hearing the ask, finding the signal and replaying it up.", "Short, realistic reps for engineering managers who spend a lot of their life in meetings. Each run trains compression, judgement and upward clarity.")}
+    <section class="signal-hero">
+      <div class="signal-hero-copy">
+        <p class="eyebrow">Signal gym</p>
+        <h1>Train the replay before the meeting makes it expensive.</h1>
+        <p>Il Mister turns messy meeting pressure into short reps: hear the ask, choose the signal, then replay upward with enough judgement to be useful.</p>
+        <div class="signal-actions">
+          <button class="button" data-start-scenario="${h(plan.scenario.id)}" data-framework="${h(plan.framework.id)}">Start next rep</button>
+          <button class="button button-quiet" data-route="coach">Analyse progress</button>
+        </div>
+      </div>
+      <div class="signal-board" aria-label="Training signal board">
+        <div class="signal-board-head">
+          <span>Today's constraint</span>
+          <strong>${h(dimensionName(plan.weakest))}</strong>
+        </div>
+        <div class="signal-line signal-line-ask"><span>ASK</span><p>${h(plan.scenario.ask)}</p></div>
+        <div class="signal-line signal-line-signal"><span>SIGNAL</span><p>${h(plan.scenario.focus)}</p></div>
+        <div class="signal-line signal-line-replay"><span>REPLAY</span><p>${h(plan.framework.name)}: ${h(plan.framework.moves.slice(0, 4).join(" / "))}</p></div>
+        <div class="signal-board-foot">
+          <span>L${plan.scenario.level}</span>
+          <span>${avg ? `${avg.toFixed(1)} avg` : "baseline needed"}</span>
+          <span>${weakest.avg ? `${weakest.avg.toFixed(1)} ${h(plan.weakest)}` : "no trend yet"}</span>
+        </div>
+      </div>
+    </section>
     <section class="command-strip">
       <div class="command-copy">
         <p class="eyebrow">Next best rep</p>
@@ -489,9 +615,9 @@ function renderHome() {
         <button class="button button-quiet" data-route="plan">View ladder</button>
       </div>
     </section>
-    <div class="home-grid">
-      <section class="hero-panel" data-level="L${plan.scenario.level}">
-        <div class="session-meta"><span>${h(plan.scenario.setting)}</span><span>${h(plan.framework.name)}</span><span>${h(plan.weakest)} focus</span></div>
+    <div class="home-grid training-grid">
+      <section class="hero-panel training-panel" data-level="L${plan.scenario.level}">
+        <div class="session-meta"><span>${h(plan.scenario.setting)}</span><span>${h(plan.framework.name)}</span><span>${h(dimensionName(plan.weakest))}</span></div>
         <h2>${h(plan.scenario.title)}</h2>
         <p>${h(plan.note)} The rep takes about six minutes: scan the meeting tape, capture the ask, then write the replay you would send upward.</p>
         <div class="hero-actions"><button class="button" data-start-scenario="${h(plan.scenario.id)}" data-framework="${h(plan.framework.id)}">Start next rep</button><button class="button button-dark" data-route="frameworks">Choose a framework</button></div>
@@ -502,6 +628,10 @@ function renderHome() {
         <section class="metric-panel"><h3>Streak</h3><strong>${streakDays()}</strong><p>Days with at least one completed practice run.</p></section>
       </aside>
     </div>
+    <section class="coach-teaser">
+      <div><p class="eyebrow">${recentReport?.mode === "ai" ? "AI readout" : "Progress coach"}</p><h2>${h(recentReport?.headline || "Let the coach read the pattern.")}</h2><p>${h(recentReport?.summary || "After a few scored reps, Il Mister can analyse your history and suggest the next three drills.")}</p></div>
+      <button class="button button-coral" data-route="coach">Open coach</button>
+    </section>
     <div class="section-title"><h2>Borrowed drills</h2><p>Patterns from jobs where replay quality matters.</p></div>
     <div class="drill-strip">
       ${FRAMEWORKS.slice(0, 4).map((fw) => `<article class="drill-tile"><span class="tag">${h(fw.industry.split(" ")[0])}</span><strong>${h(fw.name)}</strong><p>${h(fw.use)}</p></article>`).join("")}
@@ -627,6 +757,12 @@ function renderRuns() {
           <p>${h(plan.note)}</p>
           <button class="button button-teal button-small" data-start-scenario="${h(plan.scenario.id)}" data-framework="${h(plan.framework.id)}">Start planned rep</button>
         </div>
+        <div class="next-drill-box ai-drill-box">
+          <span class="tag yellow">AI coach</span>
+          <strong>Read the trend</strong>
+          <p>Ask the progress coach to inspect your scored runs and suggest the next training loop.</p>
+          <button class="button button-coral button-small" data-route="coach">Open coach</button>
+        </div>
       </aside>
       <section class="run-list-panel">
         <div class="section-title"><h2>Recent runs</h2><p>${state.runs.length} runs, ${avg ? avg.toFixed(1) : "0.0"} average</p></div>
@@ -634,6 +770,64 @@ function renderRuns() {
       </section>
     </div>
   </section>`;
+}
+
+function renderCoach() {
+  const payload = progressPayload();
+  const report = state.progressCoach?.report;
+  const plan = derivePlan();
+  const dims = payload.dimensions || [];
+  return `<section class="page">
+    ${pageHead("AI progress coach", "Turn practice history into a sharper next rep.", "The coach reads your scored runs, looks for patterns across listening, signal, structure and upward replay, then gives a focused training prescription.")}
+    <div class="coach-lab-grid">
+      <section class="coach-command-panel">
+        <p class="eyebrow">Progress readout</p>
+        <h2>${payload.totals.totalRuns ? `${payload.totals.totalRuns} scored run${payload.totals.totalRuns === 1 ? "" : "s"}` : "No scored runs yet"}</h2>
+        <p>${payload.totals.totalRuns ? `Average ${payload.totals.averageScore.toFixed(1)}. This week ${payload.totals.weeklyRuns}/${payload.totals.targetRuns}. Streak ${payload.totals.streakDays}.` : "Run a quick baseline first, then ask the coach for a pattern read."}</p>
+        <div class="coach-readout-grid">
+          ${dims.map((item) => `<div><small>${h(item.name)}</small><strong>${item.avg ? item.avg.toFixed(1) : "-"}</strong><span style="width:${Math.min(100, (item.avg || 0) * 20)}%"></span></div>`).join("")}
+        </div>
+        <div class="coach-command-actions">
+          <button class="button" data-analyse-progress ${progressCoachLoading ? "disabled" : ""}>${progressCoachLoading ? "Analysing..." : "Analyse progress with AI"}</button>
+          <button class="button button-quiet" data-start-scenario="${h(plan.scenario.id)}" data-framework="${h(plan.framework.id)}">Start recommended rep</button>
+        </div>
+        <p class="coach-fineprint">The direct Netlify app sends only recent scored-run summaries to the coach endpoint. Your full local backup stays in this browser.</p>
+      </section>
+      <section class="coach-report-panel">
+        ${progressReportHtml(report)}
+      </section>
+    </div>
+    <section class="coach-evidence-panel">
+      <div class="section-title"><h2>Evidence the coach reads</h2><p>Recent scored runs, trimmed to the replay and next drill.</p></div>
+      ${payload.recentRuns.length ? `<div class="evidence-list">${payload.recentRuns.slice().reverse().map((run) => `<article><span>${h(run.frameworkName)} / ${h(run.overall)}/5</span><strong>${h(run.scenarioTitle)}</strong><p>${h(run.replay || run.summary || "No replay text saved.")}</p></article>`).join("")}</div>` : `<div class="empty-state"><h2>No evidence yet.</h2><p>Score a run on the Practice page and this panel will fill in.</p><button class="button" data-route="practice">Start practice</button></div>`}
+    </section>
+  </section>`;
+}
+
+function progressReportHtml(report) {
+  if (!report) {
+    const local = localProgressCoach(progressPayload());
+    return `<div class="progress-report empty-report">
+      <p class="eyebrow">Coach preview</p>
+      <h2>${h(local.headline)}</h2>
+      <p>${h(local.summary)}</p>
+      <button class="button button-coral" data-analyse-progress ${progressCoachLoading ? "disabled" : ""}>${progressCoachLoading ? "Analysing..." : "Generate feedback"}</button>
+    </div>`;
+  }
+  const nextRuns = Array.isArray(report.nextThreeRuns) ? report.nextThreeRuns.slice(0, 3) : [];
+  return `<div class="progress-report">
+    <div class="report-mode"><span class="tag ${report.mode === "ai" ? "green" : "yellow"}">${h(report.mode === "ai" ? "AI coach" : "Local coach")}</span>${state.progressCoach?.createdAt ? `<small>${h(new Date(state.progressCoach.createdAt).toLocaleString())}</small>` : ""}</div>
+    <h2>${h(report.headline || "Progress review")}</h2>
+    <p>${h(report.summary || "")}</p>
+    ${report.pattern ? `<blockquote>${h(report.pattern)}</blockquote>` : ""}
+    <div class="report-columns">
+      <section><h3>Keep</h3><ul>${(report.strengths || []).map((item) => `<li>${h(item)}</li>`).join("")}</ul></section>
+      <section><h3>Watch</h3><ul>${(report.risks || []).map((item) => `<li>${h(item)}</li>`).join("")}</ul></section>
+    </div>
+    <section class="next-three"><h3>Next three reps</h3>${nextRuns.map((item, index) => `<article><span>${index + 1}</span><div><strong>${h(item.title || "Focused rep")}</strong><p>${h(item.framework || "Framework")} - ${h(item.why || "Run it with a single constraint.")}</p></div></article>`).join("")}</section>
+    ${report.managerPractice ? `<section class="manager-practice"><h3>Try in a real meeting</h3><p>${h(report.managerPractice)}</p></section>` : ""}
+    ${report.coachNote ? `<p class="coach-fineprint">${h(report.coachNote)}</p>` : ""}
+  </div>`;
 }
 
 function runCard(run) {
@@ -744,6 +938,61 @@ function localCoach(payload) {
     nextDrill: missing[0] ? `Run it again and force the phrase "${missing[0]}" into your replay.` : "Repeat at the next level and cut the replay by 25 percent.",
     coachNote: "The AI endpoint was unavailable, so the browser fallback handled this run.",
   };
+}
+
+function normaliseProgressReport(value, fallback) {
+  const item = value && typeof value === "object" && !Array.isArray(value) ? value : fallback;
+  const list = (field) => Array.isArray(item[field]) ? item[field].filter((entry) => typeof entry === "string").slice(0, 5) : fallback[field] || [];
+  const nextThreeRuns = Array.isArray(item.nextThreeRuns)
+    ? item.nextThreeRuns.slice(0, 3).map((run) => ({
+        title: trimWords(run?.title || "Focused rep", 16),
+        framework: trimWords(run?.framework || "Framework", 10),
+        why: trimWords(run?.why || "Run it with a single constraint.", 24),
+      }))
+    : fallback.nextThreeRuns;
+  return {
+    mode: item.mode === "ai" ? "ai" : "local",
+    headline: trimWords(item.headline || fallback.headline, 22),
+    summary: trimWords(item.summary || fallback.summary, 80),
+    pattern: trimWords(item.pattern || fallback.pattern || "", 50),
+    strengths: list("strengths"),
+    risks: list("risks"),
+    nextThreeRuns,
+    managerPractice: trimWords(item.managerPractice || fallback.managerPractice || "", 55),
+    coachNote: trimWords(item.coachNote || fallback.coachNote || "", 45),
+  };
+}
+
+async function analyseProgress() {
+  const payload = progressPayload();
+  const fallback = localProgressCoach(payload);
+  progressCoachLoading = true;
+  render();
+  try {
+    const response = await fetch("/.netlify/functions/progress-coach", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Progress coach unavailable");
+    state.progressCoach = {
+      createdAt: new Date().toISOString(),
+      report: normaliseProgressReport(result, fallback),
+    };
+    saveState();
+    showToast(state.progressCoach.report.mode === "ai" ? "AI progress feedback ready." : "Progress feedback ready.");
+  } catch {
+    state.progressCoach = {
+      createdAt: new Date().toISOString(),
+      report: normaliseProgressReport(fallback, fallback),
+    };
+    saveState();
+    showToast("Progress feedback ready.");
+  } finally {
+    progressCoachLoading = false;
+    render();
+  }
 }
 
 async function submitRun() {
@@ -862,6 +1111,10 @@ document.addEventListener("click", (event) => {
   }
   if (event.target.closest("[data-submit-run]")) {
     submitRun();
+    return;
+  }
+  if (event.target.closest("[data-analyse-progress]")) {
+    analyseProgress();
     return;
   }
   if (event.target.closest("[data-clear-draft]")) {

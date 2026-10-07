@@ -48,6 +48,14 @@ pnpm deploy:netlify
 
 Set `NETLIFY_BUILD_HOOK_URL` in `.env.local` or in the deployment environment. The hook URL is intentionally kept out of source control.
 
+## Optional AI progress coach
+
+The direct Netlify app includes `/.netlify/functions/progress-coach`. It analyses recent scored runs and returns a training prescription. Without provider secrets it returns a deterministic local coach response; with these Netlify environment variables it uses an OpenAI-compatible chat completions endpoint:
+
+- `AI_API_KEY` or `OPENAI_API_KEY`
+- `AI_MODEL` or `OPENAI_MODEL`
+- `AI_API_URL` optional, defaults to `https://api.openai.com/v1/chat/completions`
+
 ## Optional AI coach
 
 The app works without AI configuration. To use the richer coach, deploy `supabase/functions/il-mister-coach` or an equivalent endpoint, then configure the Site runtime variables:
